@@ -1,191 +1,336 @@
-# =========================================
-# custom_exceptions.py
-# =========================================
+# main.py
+"""
+Quest Chronicles - Main integration module
 
-class InvalidCharacterClassError(Exception):
-    pass
+Connects:
+ - character_manager
+ - inventory_system
+ - quest_handler
+ - combat_system
+ - game_data
+ - custom_exceptions
 
-class CharacterNotFoundError(Exception):
-    pass
-
-class CharacterDeadError(Exception):
-    pass
-
-class InventoryFullError(Exception):
-    pass
-
-class ItemNotFoundError(Exception):
-    pass
-
-class InsufficientResourcesError(Exception):
-    pass
-
-class InvalidItemTypeError(Exception):
-    pass
-
-class QuestNotFoundError(Exception):
-    pass
-
-class InsufficientLevelError(Exception):
-    pass
-
-class QuestRequirementsNotMetError(Exception):
-    pass
-
-class QuestAlreadyCompletedError(Exception):
-    pass
-
-class QuestNotActiveError(Exception):
-    pass
-
-class MissingDataFileError(Exception):
-    pass
-
-class InvalidDataFormatError(Exception):
-    pass
-
-class InvalidTargetError(Exception):
-    pass
-
-class CombatNotActiveError(Exception):
-    pass
-
-
-# =========================================
-# character_manager.py
-# =========================================
-
-from custom_exceptions import InvalidCharacterClassError, CharacterNotFoundError, CharacterDeadError
-
-VALID_CLASSES = ["Warrior", "Mage", "Rogue", "Cleric"]
-
-all_characters = {}
-
-def create_character(name, class_type):
-    if class_type not in VALID_CLASSES:
-        raise InvalidCharacterClassError()
-    character = {"name": name, "class": class_type, "health": 100, "level": 1, "inventory": [], "gold": 50, "active_quests": [], "completed_quests": []}
-    all_characters[name] = character
-    return character
-
-
-def load_character(name):
-    if name not in all_characters:
-        raise CharacterNotFoundError()
-    return all_characters[name]
-
-
-def check_character_alive(character):
-    if character.get("health", 0) <= 0:
-        raise CharacterDeadError()
-
-
-# =========================================
-# inventory_system.py
-# =========================================
-
-from custom_exceptions import InventoryFullError, ItemNotFoundError, InsufficientResourcesError, InvalidItemTypeError
-
-MAX_INVENTORY_SIZE = 10
-
-def add_item(character, item):
-    if len(character["inventory"]) >= MAX_INVENTORY_SIZE:
-        raise InventoryFullError()
-    character["inventory"].append(item)
-
-
-def remove_item(character, item):
-    if item not in character["inventory"]:
-        raise ItemNotFoundError()
-    character["inventory"].remove(item)
-
-
-def buy_item(character, item_data):
-    cost = item_data.get("cost", 0)
-    if character.get("gold", 0) < cost:
-        raise InsufficientResourcesError()
-    character["gold"] -= cost
-
-
-def use_item(character, item_data):
-    if item_data.get("type") != "consumable":
-        raise InvalidItemTypeError()
-
-
-# =========================================
-# quest_handler.py
-# =========================================
-
-from custom_exceptions import QuestNotFoundError, InsufficientLevelError, QuestRequirementsNotMetError, QuestAlreadyCompletedError, QuestNotActiveError
-
-def start_quest(character, quest_id, quests):
-    if quest_id not in quests:
-        raise QuestNotFoundError()
-    quest = quests[quest_id]
-    if character["level"] < quest.get("required_level", 1):
-        raise InsufficientLevelError()
-    prereq = quest.get("prerequisite", "NONE")
-    if prereq != "NONE" and prereq not in character["completed_quests"]:
-        raise QuestRequirementsNotMetError()
-    if quest_id in character["completed_quests"]:
-        raise QuestAlreadyCompletedError()
-    character["active_quests"].append(quest_id)
-
-
-def complete_quest(character, quest_id, quests):
-    if quest_id not in character["active_quests"]:
-        raise QuestNotActiveError()
-    character["active_quests"].remove(quest_id)
-    character["completed_quests"].append(quest_id)
-
-
-# =========================================
-# combat_system.py
-# =========================================
-
-from custom_exceptions import InvalidTargetError, CombatNotActiveError
-
-class SimpleBattle:
-    def __init__(self, character, enemy):
-        if "health" not in character or "health" not in enemy:
-            raise InvalidTargetError()
-        self.character = character
-        self.enemy = enemy
-        self.combat_active = True
-
-    def attack(self):
-        if not self.combat_active:
-            raise CombatNotActiveError()
-        self.enemy["health"] -= 10
-
-
-# =========================================
-# game_data.py
-# =========================================
+This file is primarily a thin orchestrator for the modules used in tests
+and a small CLI so you can exercise the game manually.
+"""
 
 import os
-from custom_exceptions import MissingDataFileError, InvalidDataFormatError
-
-def load_data(filename):
-    if not os.path.exists(filename):
-        raise MissingDataFileError()
-    try:
-        with open(filename, "r") as f:
-            data = f.read()
-            if not data.strip().startswith("{"):
-                raise InvalidDataFormatError()
-    except Exception:
-        raise InvalidDataFormatError()
-    return data
-
-
-# =========================================
-# main.py (Starter placeholder - integrate with above modules)
-# =========================================
+import json
 
 import character_manager
 import inventory_system
 import quest_handler
 import combat_system
 import game_data
-from custom_exceptions import *
+
+from custom_exceptions import (
+    MissingDataFileError,
+    InvalidDataFormatError,
+    InvalidCharacterClassError,
+    CharacterNotFoundError,
+    CharacterDeadError,
+    InventoryFullError,
+    ItemNotFoundError,
+    InsufficientResourcesError,
+    InvalidItemTypeError,
+    QuestNotFoundError,
+    InsufficientLevelError,
+    QuestRequirementsNotMetError,
+    QuestAlreadyCompletedError,
+    QuestNotActiveError,
+    InvalidTargetError,
+    CombatNotActiveError
+)
+
+# -------------------------
+# Simple persistence helpers
+# -------------------------
+SAVE_DIR = os.path.join("data", "save_games")
+os.makedirs(SAVE_DIR, exist_ok=True)
+
+def save_character_to_file(character):
+    """
+    Save character dict to data/save_games/<name>.json
+    """
+    if not character or "name" not in character:
+        raise ValueError("Invalid character to save.")
+    path = os.path.join(SAVE_DIR, f"{character['name']}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(character, f, indent=2)
+    return path
+
+def load_character_from_file(name):
+    """
+    Load character saved file and return dictionary.
+    """
+    path = os.path.join(SAVE_DIR, f"{name}.json")
+    if not os.path.exists(path):
+        raise CharacterNotFoundError(f"Save for '{name}' not found.")
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data
+
+# -------------------------
+# Game data loading wrappers
+# -------------------------
+def load_game_files(quests_path="data/quests.txt", items_path="data/items.txt"):
+    """
+    Attempt to load quests and items using game_data module.
+    Raises MissingDataFileError or InvalidDataFormatError to caller.
+    Returns (quests_dict, items_dict)
+    """
+    quests = game_data.load_quests(quests_path)
+    items = game_data.load_items(items_path)
+    return quests, items
+
+# -------------------------
+# Small CLI & helpers
+# -------------------------
+def display_welcome():
+    print("=" * 48)
+    print("      QUEST CHRONICLES - INTEGRATION DEMO")
+    print("=" * 48)
+    print()
+
+def create_and_register_character(name, class_name):
+    """
+    Wrapper around character_manager.create_character that returns the character dict.
+    Re-raises the InvalidCharacterClassError for test assertions.
+    """
+    return character_manager.create_character(name, class_name)
+
+def simple_shop_buy(character, item_id, items_db):
+    """
+    Buy an item from items_db (a dict) and add it to character inventory.
+    item_id is a key in items_db. This uses inventory_system.buy_item if available,
+    otherwise falls back to decreasing gold and adding item name to inventory list.
+    """
+    item = items_db.get(item_id)
+    if item is None:
+        raise ItemNotFoundError(f"Item '{item_id}' not found in shop.")
+
+    # Prefer module-level buy function if present
+    try:
+        inventory_system.buy_item(character, item_id, qty=1)
+    except AttributeError:
+        # fallback: simple cost deduction
+        cost = item.get("value", item.get("cost", 0))
+        if character.get("gold", 0) < cost:
+            raise InsufficientResourcesError("Not enough gold to buy item.")
+        character["gold"] -= cost
+        # add to inventory representation (list or dict)
+        if isinstance(character.get("inventory", None), list):
+            character["inventory"].append(item_id)
+        else:
+            # dictionary inventory: increment
+            character.setdefault("inventory", {})
+            character["inventory"][item_id] = character["inventory"].get(item_id, 0) + 1
+    return True
+
+# -------------------------
+# Exploration / Combat flow
+# -------------------------
+def encounter_enemy_and_fight(character, enemy_type="goblin"):
+    """
+    Create an enemy and simulate a SimpleBattle between character and enemy.
+    Returns battle result dict or raises exceptions if enemy invalid.
+    """
+    try:
+        enemy = combat_system.create_enemy(enemy_type)
+    except Exception:
+        # convert to our InvalidTargetError if combat_system raised other types
+        raise InvalidTargetError(f"Invalid enemy type '{enemy_type}'")
+
+    # Ensure character and enemy are the expected dicts
+    battle = combat_system.SimpleBattle(character, enemy)
+    # Attack until one side is dead (for test determinism, call attack once and allow tests to mutate)
+    # But provide a helper API to call battle.attack()
+    return battle
+
+# -------------------------
+# Quest wrappers
+# -------------------------
+def accept_quest_for_character(character, quest_id, quests_db):
+    """
+    Calls quest_handler.accept_quest(...) if available, otherwise falls back to our accept_quest.
+    """
+    # try quest_handler.accept_quest signature (character, quest_id, quests)
+    try:
+        return quest_handler.accept_quest(character, quest_id, quests_db)
+    except TypeError:
+        # maybe quest_handler.start_quest used different name - attempt to call start_quest
+        try:
+            return quest_handler.start_quest(character, quest_id, quests_db)
+        except AttributeError:
+            raise
+
+def complete_quest_for_character(character, quest_id, quests_db):
+    try:
+        return quest_handler.complete_quest(character, quest_id, quests_db)
+    except AttributeError:
+        # fallback behavior
+        if quest_id not in character.get("active_quests", []):
+            raise QuestNotActiveError()
+        character["active_quests"].remove(quest_id)
+        character.setdefault("completed_quests", []).append(quest_id)
+        q = quests_db.get(quest_id, {})
+        character["experience"] = character.get("experience", 0) + q.get("reward_xp", 0)
+        character["gold"] = character.get("gold", 0) + q.get("reward_gold", 0)
+        return q
+
+# -------------------------
+# Small interactive menu (manual use)
+# -------------------------
+def run_cli():
+    display_welcome()
+    # try to load data files - ignore errors here so tests can create their own files
+    try:
+        quests, items = load_game_files()
+        print("Loaded game data.")
+    except MissingDataFileError:
+        print("Game data files missing. Some functionality may be limited.")
+        quests, items = {}, {}
+    except InvalidDataFormatError as e:
+        print("Game data files invalid:", e)
+        quests, items = {}, {}
+
+    current_char = None
+    while True:
+        print("\nMain Menu:")
+        print("1) New Character")
+        print("2) Load Character")
+        print("3) View Character")
+        print("4) Inventory")
+        print("5) Quests")
+        print("6) Explore (fight)")
+        print("7) Save Character")
+        print("8) Quit")
+        choice = input("Choose: ").strip()
+        if choice == "1":
+            name = input("Name: ").strip() or "Hero"
+            print("Classes: Warrior, Mage, Rogue, Cleric")
+            cls = input("Class: ").strip() or "Warrior"
+            try:
+                current_char = create_and_register_character(name, cls)
+                # ensure required fields exist for integration tests
+                current_char.setdefault("active_quests", [])
+                current_char.setdefault("completed_quests", [])
+                current_char.setdefault("experience", current_char.get("experience", 0))
+                current_char.setdefault("inventory", current_char.get("inventory", []))
+                print(f"Created {name} the {cls}.")
+            except InvalidCharacterClassError as e:
+                print("Invalid class:", e)
+
+        elif choice == "2":
+            name = input("Enter saved character name: ").strip()
+            try:
+                current_char = load_character_from_file(name)
+                print(f"Loaded {name}.")
+            except CharacterNotFoundError as e:
+                print(e)
+
+        elif choice == "3":
+            if not current_char:
+                print("No character loaded.")
+                continue
+            print(json.dumps(current_char, indent=2))
+
+        elif choice == "4":
+            if not current_char:
+                print("No character loaded.")
+                continue
+            print("Inventory:", current_char.get("inventory", []))
+            sub = input("Add (a) / Remove (r) / Use (u) / Back (b): ").strip().lower()
+            if sub == "a":
+                iid = input("Item id to add: ").strip()
+                try:
+                    inventory_system.add_item_to_inventory(current_char, iid)
+                    print("Added.")
+                except InventoryFullError:
+                    print("Inventory full.")
+                except Exception as e:
+                    print("Error adding item:", e)
+            elif sub == "r":
+                iid = input("Item id to remove: ").strip()
+                try:
+                    inventory_system.remove_item_from_inventory(current_char, iid)
+                    print("Removed.")
+                except ItemNotFoundError:
+                    print("Item not found.")
+            elif sub == "u":
+                iid = input("Item id to use: ").strip()
+                item = items.get(iid) if isinstance(items, dict) else None
+                try:
+                    inventory_system.use_item(current_char, item or {"type":"consumable", "health":10})
+                    print("Used item.")
+                except InvalidItemTypeError:
+                    print("Invalid item type.")
+            else:
+                continue
+
+        elif choice == "5":
+            if not current_char:
+                print("No character loaded.")
+                continue
+            print("Active quests:", current_char.get("active_quests", []))
+            print("Completed quests:", current_char.get("completed_quests", []))
+            qaction = input("Accept (a) / Complete (c) / Back (b): ").strip().lower()
+            if qaction == "a":
+                qid = input("Quest id to accept: ").strip()
+                try:
+                    accept_quest_for_character(current_char, qid, quests)
+                    print("Accepted.")
+                except Exception as e:
+                    print("Could not accept quest:", e)
+            elif qaction == "c":
+                qid = input("Quest id to complete: ").strip()
+                try:
+                    complete_quest_for_character(current_char, qid, quests)
+                    print("Completed.")
+                except Exception as e:
+                    print("Could not complete quest:", e)
+
+        elif choice == "6":
+            if not current_char:
+                print("Load or create a character first.")
+                continue
+            etype = input("Enemy (goblin/orc): ").strip() or "goblin"
+            try:
+                battle = encounter_enemy_and_fight(current_char, etype)
+                # quick loop, player attacks until enemy dead
+                while battle.combat_active and current_char.get("health", 1) > 0:
+                    try:
+                        alive = battle.attack()
+                        if not alive:
+                            print("Enemy defeated!")
+                            # grant simple rewards if present
+                            current_char["experience"] = current_char.get("experience", 0) + battle.enemy.get("xp", 0)
+                            current_char["gold"] = current_char.get("gold", 0) + battle.enemy.get("gold", 0)
+                            break
+                    except CombatNotActiveError:
+                        print("Combat not active.")
+                        break
+            except InvalidTargetError as e:
+                print("Invalid enemy:", e)
+
+        elif choice == "7":
+            if not current_char:
+                print("No character loaded.")
+                continue
+            try:
+                save_character_to_file(current_char)
+                print("Saved.")
+            except Exception as e:
+                print("Save failed:", e)
+
+        elif choice == "8":
+            print("Goodbye.")
+            break
+
+        else:
+            print("Unknown option, choose 1-8.")
+
+
+# Only run CLI when module executed directly
+if __name__ == "__main__":
+    run_cli()
