@@ -1,0 +1,6 @@
+data/
+   characters.json
+
+{
+    "characters": []
+}
