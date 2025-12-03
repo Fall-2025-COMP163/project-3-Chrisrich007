@@ -1,7 +1,65 @@
-import character_manager
-import inventory_system
-import quest_handler
-import combat_system
-import game_data
+# main.py
 
-# No runtime menu. This file exists so the imports resolve correctly.
+from character_manager import create_character, load_character
+from inventory_system import show_inventory, add_item_to_inventory, remove_item_from_inventory
+from quest_handler import load_quests, start_quest
+from combat_system import start_battle
+from game_data import load_game_data, save_game_data
+from custom_exceptions import *
+
+def main():
+    print("=== Welcome to Quest Chronicles ===")
+
+    try:
+        data = load_game_data()
+    except Exception as e:
+        print(f"Error loading game data: {e}")
+        return
+
+    print("\n1. New Game\n2. Load Game")
+    choice = input("Choose an option: ")
+
+    if choice == "1":
+        player = create_character()
+    elif choice == "2":
+        try:
+            player = load_character()
+        except Exception as e:
+            print(f"Could not load character: {e}")
+            return
+    else:
+        print("Invalid choice!")
+        return
+
+    print(f"\nWelcome, {player['name']} the {player['class']}!")
+
+    # Placeholder main loop (you will expand this later)
+    running = True
+    while running:
+        print("\n===== MAIN MENU =====")
+        print("1. View Inventory")
+        print("2. Start Quest")
+        print("3. Save Game")
+        print("4. Exit")
+
+        selection = input("Choose action: ")
+
+        if selection == "1":
+            show_inventory(player)
+
+        elif selection == "2":
+            quests = load_quests()
+            start_quest(player, quests)
+
+        elif selection == "3":
+            save_game_data(player)
+
+        elif selection == "4":
+            running = False
+            print("Thanks for playing!")
+
+        else:
+            print("Invalid option.")
+
+if __name__ == "__main__":
+    main()
